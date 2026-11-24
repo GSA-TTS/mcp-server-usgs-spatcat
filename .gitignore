@@ -1,6 +1,7 @@
 # Virtual environments
 .venv/
 venv/
+.venv-linux
 
 # Environment variables (keep .env.example, never commit .env)
 .env
@@ -44,3 +45,4 @@ htmlcov/
 eval/databricks/agent_server/agent.py
 eval/databricks/agent_server/utils.py 
 
+.venv-linux/

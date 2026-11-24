@@ -1,5 +1,121 @@
 # GSA MCP Hackathon — Server Template
 
+## USGS Spatial Data Catalog tools
+
+This repository now exposes ten read-only tools, prefixed `usgs_spatcat_`:
+`search_layers`, `get_layer`, `list_spatial_layers`, `get_sublayers`,
+`get_native_resolution`, `intersect_layers`, `distance_to_layers`,
+`query_attributes`, `list_analysis_modules`, and `analyze_point`.
+
+Set `SPATCAT_CATALOG_URL` and `SPATCAT_ANALYSIS_URL` in your local `.env` to
+approved HTTPS API bases including `/spatcat-api` and `/spatcat-analysis`.
+Optional `SPATCAT_CATALOG_TOKEN` and `SPATCAT_ANALYSIS_TOKEN` are independently
+scoped bearer credentials. No live API hostname is assumed.
+
+On Linux, keep the environment separate from a macOS environment:
+
+```bash
+UV_PROJECT_ENVIRONMENT=.venv-linux uv sync --frozen --group dev
+.venv-linux/bin/python -m spatcat_mcp.app
+.venv-linux/bin/pytest tests/ -q
+.venv-linux/bin/ruff check .
+```
+
+`app.py` and its transport precedence are unchanged: a platform-injected port
+selects HTTP, explicit `MCP_TRANSPORT=streamable-http` selects HTTP, otherwise
+the server uses stdio. The template server display name is also unchanged.
+The original example tool is no longer registered; example resources/prompts
+remain template placeholders, not USGS data.
+
+### Data preparation skill over MCP
+
+The Python package is `spatcat_mcp`; the distribution and command remain
+`example-server`. FastMCP is pinned to 4.2.5 for its documented skills API.
+The server serves one AI-authored documentation skill from
+[`skills/spatcat-data-preparation/SKILL.md`](skills/spatcat-data-preparation/SKILL.md):
+format selection, GeoParquet/PMTiles/COG preparation and validation, permission-gated
+S3 delivery planning, and registration preparation. All commands in it are
+suggestions, not completed actions. No conversion, upload, or write tools were added.
+
+Read it using MCP resources at `skill://spatcat-data-preparation/SKILL.md`, or
+use FastMCP's Skills extension for discovery and verified whole-skill retrieval:
+
+```python
+from fastmcp import Client
+from fastmcp.skills import SkillsClientExtension
+
+# An in-process example; use your approved server connection in a real client.
+from spatcat_mcp.app import mcp
+
+async def read_preparation_skill():
+    async with Client(mcp, extensions=[SkillsClientExtension()]) as client:
+        entries = await client.list_skills()
+        skill = await client.read_skill("skill://spatcat-data-preparation/SKILL.md")
+        return entries, skill
+```
+
+Clients without the extension can list/read resources, or use FastMCP
+`list_skill_resources()` and `read_skill()` through the manifest fallback.
+Tool-only clients will not discover this skill: no resource-to-tools transform
+is enabled, so the ten domain tools remain unchanged. Only this named skill and
+its `SKILL.md` are allowed; `.agents/skills/` is never scanned. The file is included
+in wheels and source distributions. Restart the server after editing it.
+AI-generated code and documentation require human review before production use.
+
+Verification: `.venv-linux/bin/pytest tests/ -q`,
+`.venv-linux/bin/ruff check src tests`,
+`.venv-linux/bin/ruff format --check src tests`, and
+`uv build --python .venv-linux/bin/python` (build dependency downloads require approval).
+
+### Query workflow and limitations
+
+Search for layers, inspect metadata/capabilities and Esri sublayers, then run
+spatial or attribute queries. Discover module IDs before point analysis.
+GeoJSON is validated as two-dimensional WGS84 (longitude, latitude), with a
+10,000-position budget; reprojection and topology repair are not performed.
+Confirm this CRS assumption with the upstream operator before live use.
+
+Results have `source`, `retrieved_at`, `data`, and `warnings`. `data` preserves
+the upstream object/array, including per-layer errors and pagination metadata.
+No undocumented response schemas, total counts, or dataset freshness dates are
+invented. Catalog `limit` defaults to 20 and is capped at 100. Only the catalog
+endpoint has documented pagination; other tools do not fabricate pagination.
+Responses exceeding 5 MB fail explicitly rather than silently truncate.
+
+Raster distance is not implemented by the API. S3 polygon distance uses the
+centroid and ignores the buffer; Esri/WFS distance uses closest approach.
+WMS and OGC support must be checked per layer. Capability metadata is returned
+without guessing undocumented boolean field names or inferring support solely
+from service type. Upstream unsupported-operation/partial-failure responses
+remain visible; no-result queries are not determinations of site safety.
+
+Attribute filters support field-to-literal comparisons, `IN`, `LIKE`,
+`IS [NOT] NULL`, `AND`/`OR`, and bounded parentheses. Functions, comments,
+subqueries, and SQL statements are rejected. `out_fields` accepts `*` or a
+comma-separated identifier list. This is validation of an upstream Esri filter,
+not permission to execute SQL against a database.
+
+### Security and deployment boundary
+
+Tool callers cannot choose HTTP origins. Origins are operator configuration;
+HTTPS/443, disabled redirects/proxy inheritance, response limits, request
+deadlines, and connection-time public-IP validation apply to every USGS API
+request. DNS answers are validated and the TCP connection uses the validated
+IP while TLS verifies the original hostname. The network adapter touches
+httpx/httpcore internals and is tested against `uv.lock`; re-test on upgrades.
+No request/response bodies, coordinates, or credentials are logged by these
+tools. The API may perform costly backend analysis despite read-only intent.
+
+Before remote deployment, configure MCP authentication, per-tool authorization,
+rate limiting at the gateway, exact-origin egress allowlisting, and log access
+controls. Existing template HTTP transport is not an authorization boundary.
+These deployment changes are intentionally not part of this tool-only change.
+Do not expose the template HTTP server publicly without those controls.
+Live validation requires approved API URLs, credentials if needed, and explicit
+network permission. AI-generated changes require human review before production.
+
+---
+
 A ready-to-run starter for building a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server in Python, plus deployment kits for **IBM Cloud (watsonx Orchestrate)** and **Databricks**.
 
 Built with [FastMCP](https://github.com/jlowin/fastmcp) and [uv](https://docs.astral.sh/uv/). If you have never built an MCP server before, start with **[QUICKSTART.md](QUICKSTART.md)**.
